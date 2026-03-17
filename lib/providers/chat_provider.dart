@@ -6,6 +6,8 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 // Импорт пакета для получения путей к директориям
 import 'package:path_provider/path_provider.dart';
+// Импорт SharedPreferences
+import 'package:shared_preferences/shared_preferences.dart';
 // Импорт модели сообщения
 import '../models/message.dart';
 // Импорт клиента для работы с API
@@ -387,5 +389,33 @@ class ChatProvider with ChangeNotifier {
       'response_time_stats': responseTimeStats,
       'message_length_stats': messageLengthStats,
     };
+  }
+
+  // Метод пересоздания клиента с новыми credentials
+  Future<void> reinitializeClient(String apiKey, String baseUrl) async {
+    try {
+      _log('Reinitializing client with new credentials...');
+
+      // Сохранить в SharedPreferences
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('api_key', apiKey);
+
+      // Определить провайдера по baseUrl
+      final provider = baseUrl.contains('vsegpt.ru') ? 'vsegpt' : 'openrouter';
+      await prefs.setString('api_provider', provider);
+
+      // Обновить OpenRouterClient
+      await _api.updateCredentials(apiKey, baseUrl);
+
+      // Перезагрузить модели и баланс
+      await _loadModels();
+      await _loadBalance();
+
+      _log('Client reinitialized successfully');
+      notifyListeners();
+    } catch (e) {
+      _log('Error reinitializing client: $e');
+      rethrow;
+    }
   }
 }

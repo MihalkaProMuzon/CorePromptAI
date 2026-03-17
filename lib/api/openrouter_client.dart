@@ -6,15 +6,17 @@ import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart';
 // Import package for working with .env files
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+// Import SharedPreferences
+import 'package:shared_preferences/shared_preferences.dart';
 
 // Класс клиента для работы с API OpenRouter
 class OpenRouterClient {
   // API ключ для авторизации
-  final String? apiKey;
+  String? apiKey;
   // Базовый URL API
-  final String? baseUrl;
+  String? baseUrl;
   // Заголовки HTTP запросов
-  final Map<String, String> headers;
+  Map<String, String> headers;
 
   // Единственный экземпляр класса (Singleton)
   static final OpenRouterClient _instance = OpenRouterClient._internal();
@@ -26,43 +28,107 @@ class OpenRouterClient {
 
   // Приватный конструктор для реализации Singleton
   OpenRouterClient._internal()
-      : apiKey =
-            dotenv.env['OPENROUTER_API_KEY'], // Получение API ключа из .env
-        baseUrl = dotenv.env['BASE_URL'], // Получение базового URL из .env
-        headers = {
-          'Authorization':
-              'Bearer ${dotenv.env['OPENROUTER_API_KEY']}', // Заголовок авторизации
-          'Content-Type': 'application/json', // Указание типа контента
-          'X-Title': 'AI Chat Flutter', // Название приложения
-        } {
+      : apiKey = null,
+        baseUrl = null,
+        headers = {} {
     // Инициализация клиента
     _initializeClient();
   }
 
   // Метод инициализации клиента
-  void _initializeClient() {
+  Future<void> _initializeClient() async {
     try {
       if (kDebugMode) {
         print('Initializing OpenRouterClient...');
-        print('Base URL: $baseUrl');
+      }
+
+      // Попытка загрузить из SharedPreferences
+      try {
+        final SharedPreferences prefs = await SharedPreferences.getInstance();
+        final savedApiKey = prefs.getString('api_key');
+        final savedProvider = prefs.getString('api_provider');
+
+        if (savedApiKey != null && savedApiKey.isNotEmpty) {
+          apiKey = savedApiKey;
+          baseUrl = savedProvider == 'vsegpt'
+              ? 'https://api.vsegpt.ru/v1'
+              : 'https://openrouter.ai/api/v1';
+
+          if (kDebugMode) {
+            print('Loaded credentials from SharedPreferences');
+            print('Provider: $savedProvider');
+          }
+        }
+      } catch (e) {
+        if (kDebugMode) {
+          print('Could not load from SharedPreferences: $e');
+        }
+      }
+
+      // Fallback к .env если нет в SharedPreferences
+      if (apiKey == null || apiKey!.isEmpty) {
+        apiKey = dotenv.env['OPENROUTER_API_KEY'];
+        baseUrl = dotenv.env['BASE_URL'];
+
+        if (kDebugMode) {
+          print('Using credentials from .env');
+        }
       }
 
       // Проверка наличия API ключа
-      if (apiKey == null) {
-        throw Exception('OpenRouter API key not found in .env');
+      if (apiKey == null || apiKey!.isEmpty) {
+        throw Exception('OpenRouter API key not found');
       }
       // Проверка наличия базового URL
-      if (baseUrl == null) {
-        throw Exception('BASE_URL not found in .env');
+      if (baseUrl == null || baseUrl!.isEmpty) {
+        throw Exception('BASE_URL not found');
       }
 
+      // Обновление заголовков
+      headers = {
+        'Authorization': 'Bearer $apiKey',
+        'Content-Type': 'application/json',
+        'X-Title': 'AI Chat Flutter',
+      };
+
       if (kDebugMode) {
+        print('Base URL: $baseUrl');
         print('OpenRouterClient initialized successfully');
       }
     } catch (e, stackTrace) {
       if (kDebugMode) {
         print('Error initializing OpenRouterClient: $e');
         print('Stack trace: $stackTrace');
+      }
+      rethrow;
+    }
+  }
+
+  // Метод обновления credentials
+  Future<void> updateCredentials(String newApiKey, String newBaseUrl) async {
+    try {
+      if (kDebugMode) {
+        print('Updating OpenRouterClient credentials...');
+        print('New Base URL: $newBaseUrl');
+      }
+
+      // Обновление полей
+      apiKey = newApiKey;
+      baseUrl = newBaseUrl;
+
+      // Пересоздание заголовков
+      headers = {
+        'Authorization': 'Bearer $newApiKey',
+        'Content-Type': 'application/json',
+        'X-Title': 'AI Chat Flutter',
+      };
+
+      if (kDebugMode) {
+        print('Credentials updated successfully');
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('Error updating credentials: $e');
       }
       rethrow;
     }
