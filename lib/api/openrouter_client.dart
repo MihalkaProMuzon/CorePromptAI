@@ -8,6 +8,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 // Import SharedPreferences
 import 'package:shared_preferences/shared_preferences.dart';
+import '../models/ai_model.dart';
 
 // Класс клиента для работы с API OpenRouter
 class OpenRouterClient {
@@ -30,9 +31,10 @@ class OpenRouterClient {
   OpenRouterClient._internal()
       : apiKey = null,
         baseUrl = null,
-        headers = {} {
-    // Инициализация клиента
-    _initializeClient();
+        headers = {};
+
+  Future<void> initialize() async {
+    await _initializeClient();
   }
 
   // Метод инициализации клиента
@@ -135,7 +137,15 @@ class OpenRouterClient {
   }
 
   // Метод получения списка доступных моделей
-  Future<List<Map<String, dynamic>>> getModels() async {
+  Future<List<AIModel>> getModels() async {
+    // Ждем данные если их нет
+    if (apiKey == null ||
+        apiKey!.isEmpty ||
+        baseUrl == null ||
+        baseUrl!.isEmpty) {
+      await initialize();
+    }
+
     try {
       // Выполнение GET запроса для получения моделей
       final response = await http.get(
@@ -153,36 +163,20 @@ class OpenRouterClient {
         final modelsData = json.decode(response.body);
         if (modelsData['data'] != null) {
           return (modelsData['data'] as List)
-              .map((model) => {
-                    'id': model['id'] as String,
-                    'name': (() {
-                      try {
-                        return utf8.decode((model['name'] as String).codeUnits);
-                      } catch (e) {
-                        // Remove invalid UTF-8 characters and try again
-                        final cleaned = (model['name'] as String)
-                            .replaceAll(RegExp(r'[^\x00-\x7F]'), '');
-                        return utf8.decode(cleaned.codeUnits);
-                      }
-                    })(),
-                    'pricing': {
-                      'prompt': model['pricing']['prompt'] as String,
-                      'completion': model['pricing']['completion'] as String,
-                    },
-                    'context_length': (model['context_length'] ??
-                            model['top_provider']['context_length'] ??
-                            0)
-                        .toString(),
-                  })
+              .map((model) => AIModel.fromApi(model))
               .toList();
         }
         throw Exception('Invalid API response format');
       } else {
         // Возвращение моделей по умолчанию, если API недоступен
         return [
-          {'id': 'deepseek-coder', 'name': 'DeepSeek'},
-          {'id': 'claude-3-sonnet', 'name': 'Claude 3.5 Sonnet'},
-          {'id': 'gpt-3.5-turbo', 'name': 'GPT-3.5 Turbo'},
+          AIModel(
+            id: 'deepseek-coder',
+            name: 'DeepSeek',
+            promptPrice: 0,
+            completionPrice: 0,
+            contextLength: 0,
+          ),
         ];
       }
     } catch (e) {
@@ -191,15 +185,27 @@ class OpenRouterClient {
       }
       // Возвращение моделей по умолчанию в случае ошибки
       return [
-        {'id': 'deepseek-coder', 'name': 'DeepSeek'},
-        {'id': 'claude-3-sonnet', 'name': 'Claude 3.5 Sonnet'},
-        {'id': 'gpt-3.5-turbo', 'name': 'GPT-3.5 Turbo'},
+        AIModel(
+          id: 'deepseek-coder',
+          name: 'DeepSeek',
+          promptPrice: 0,
+          completionPrice: 0,
+          contextLength: 0,
+        ),
       ];
     }
   }
 
   // Метод отправки сообщения через API
   Future<Map<String, dynamic>> sendMessage(String message, String model) async {
+    // Ждем данные если их нет
+    if (apiKey == null ||
+        apiKey!.isEmpty ||
+        baseUrl == null ||
+        baseUrl!.isEmpty) {
+      await initialize();
+    }
+
     try {
       // Подготовка данных для отправки
       final data = {
@@ -251,6 +257,14 @@ class OpenRouterClient {
 
   // Метод получения текущего баланса
   Future<String> getBalance() async {
+    // Ждем данные если их нет
+    if (apiKey == null ||
+        apiKey!.isEmpty ||
+        baseUrl == null ||
+        baseUrl!.isEmpty) {
+      await initialize();
+    }
+
     try {
       // Выполнение GET запроса для получения баланса
       final response = await http.get(
@@ -278,7 +292,13 @@ class OpenRouterClient {
             final credits = data['data']['total_credits'] ?? 0; // Общие кредиты
             final usage =
                 data['data']['total_usage'] ?? 0; // Использованные кредиты
-            return '\$${(credits - usage).toStringAsFixed(2)}'; // Расчет доступного баланса
+
+            final value = credits - usage;
+            if (value < 0.01) {
+              return '\$${value.toStringAsFixed(6)}';
+            } else {
+              return '\$${value.toStringAsFixed(2)}';
+            }
           }
         }
       }

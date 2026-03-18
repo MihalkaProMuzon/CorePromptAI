@@ -10,6 +10,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../providers/chat_provider.dart';
 // Импорт модели сообщения
 import '../models/message.dart';
+import '../models/ai_model.dart';
 
 // Виджет для обработки ошибок в UI
 class ErrorBoundary extends StatelessWidget {
@@ -82,6 +83,36 @@ class _MessageBubble extends StatelessWidget {
               ),
             ),
           ),
+
+          // 👇 МОДЕЛЬ (добавили)
+          if (!message.isUser && message.modelId != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Consumer<ChatProvider>(
+                builder: (context, chatProvider, child) {
+                  final model = chatProvider.availableModels.firstWhere(
+                    (m) => m.id == message.modelId,
+                    orElse: () => AIModel(
+                      id: message.modelId!,
+                      name: message.modelId!,
+                      promptPrice: 0,
+                      completionPrice: 0,
+                      contextLength: 0,
+                    ),
+                  );
+
+                  return Text(
+                    model.name,
+                    style: const TextStyle(
+                      color: Colors.white38,
+                      fontSize: 10,
+                    ),
+                  );
+                },
+              ),
+            ),
+
+          // 👇 токены + стоимость
           if (message.tokens != null || message.cost != null)
             Padding(
               padding: const EdgeInsets.only(top: 4),
@@ -102,8 +133,8 @@ class _MessageBubble extends StatelessWidget {
                     Consumer<ChatProvider>(
                       builder: (context, chatProvider, child) {
                         final isVsetgpt =
-                            chatProvider.baseUrl?.contains('vsetgpt.ru') ==
-                                true;
+                            chatProvider.baseUrl?.contains('vsegpt.ru') == true;
+
                         return Text(
                           message.cost! < 0.001
                               ? isVsetgpt
@@ -131,7 +162,9 @@ class _MessageBubble extends StatelessWidget {
                       final textToCopy = message.isUser
                           ? message.cleanContent
                           : '${messages[index - 1].cleanContent}\n\n${message.cleanContent}';
+
                       Clipboard.setData(ClipboardData(text: textToCopy));
+
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
                           content: Text('Текст скопирован',
@@ -257,21 +290,17 @@ class ChatScreen extends StatelessWidget {
     return AppBar(
       backgroundColor: const Color(0xFF262626),
       toolbarHeight: 48,
-      title: Row(
-        children: [
-          _buildModelSelector(context),
-          const Spacer(),
-          _buildBalanceDisplay(context),
-        ],
+      title: Consumer<ChatProvider>(
+        builder: (context, chatProvider, child) {
+          return Row(
+            children: [
+              Expanded(child: _buildModelSelector(context)),
+              const SizedBox(width: 8),
+              _buildBalanceDisplay(context),
+            ],
+          );
+        },
       ),
-      actions: [
-        IconButton(
-          icon: const Icon(Icons.delete_outline),
-          onPressed: () => _showClearHistoryDialog(context),
-          tooltip: 'Очистить историю',
-        ),
-        _buildMenuButton(context),
-      ],
     );
   }
 
@@ -301,48 +330,44 @@ class ChatScreen extends StatelessWidget {
               }
             },
             items: chatProvider.availableModels
-                .map<DropdownMenuItem<String>>((Map<String, dynamic> model) {
+                .map<DropdownMenuItem<String>>((AIModel model) {
               return DropdownMenuItem<String>(
-                value: model['id'],
+                value: model.id,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      model['name'] ?? '',
+                      model.name,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(fontSize: 12),
                     ),
                     const SizedBox(height: 4),
                     Row(
                       children: [
-                        Tooltip(
+                        const Tooltip(
                           message: 'Входные токены',
-                          child: const Icon(Icons.arrow_upward, size: 12),
+                          child: Icon(Icons.arrow_upward, size: 12),
                         ),
                         Text(
-                          chatProvider.formatPricing(
-                              double.tryParse(model['pricing']?['prompt']) ??
-                                  0.0),
+                          chatProvider.formatPricing(model.promptPrice),
                           style: const TextStyle(fontSize: 10),
                         ),
                         const SizedBox(width: 8),
-                        Tooltip(
+                        const Tooltip(
                           message: 'Генерация',
-                          child: const Icon(Icons.arrow_downward, size: 12),
+                          child: Icon(Icons.arrow_downward, size: 12),
                         ),
                         Text(
-                          chatProvider.formatPricing(double.tryParse(
-                                  model['pricing']?['completion']) ??
-                              0.0),
+                          chatProvider.formatPricing(model.completionPrice),
                           style: const TextStyle(fontSize: 10),
                         ),
                         const SizedBox(width: 8),
-                        Tooltip(
+                        const Tooltip(
                           message: 'Контекст',
-                          child: const Icon(Icons.memory, size: 12),
+                          child: Icon(Icons.memory, size: 12),
                         ),
                         Text(
-                          ' ${model['context_length'] ?? '0'}',
+                          ' ${model.contextLength}',
                           style: const TextStyle(fontSize: 10),
                         ),
                       ],
@@ -378,66 +403,6 @@ class ChatScreen extends StatelessWidget {
           ),
         );
       },
-    );
-  }
-
-  // Построение кнопки меню с дополнительными опциями
-  Widget _buildMenuButton(BuildContext context) {
-    return PopupMenuButton<String>(
-      icon: const Icon(Icons.more_vert, color: Colors.white, size: 16),
-      color: const Color(0xFF333333),
-      onSelected: (String choice) async {
-        final chatProvider = context.read<ChatProvider>();
-        switch (choice) {
-          case 'export':
-            final path = await chatProvider.exportMessagesAsJson();
-            if (context.mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('История сохранена в: $path',
-                      style: const TextStyle(fontSize: 12)),
-                  backgroundColor: Colors.green,
-                ),
-              );
-            }
-            break;
-          case 'logs':
-            final path = await chatProvider.exportLogs();
-            if (context.mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('Логи сохранены в: $path',
-                      style: const TextStyle(fontSize: 12)),
-                  backgroundColor: Colors.green,
-                ),
-              );
-            }
-            break;
-          case 'clear':
-            _showClearHistoryDialog(context);
-            break;
-        }
-      },
-      itemBuilder: (BuildContext context) => [
-        const PopupMenuItem<String>(
-          value: 'export',
-          height: 40,
-          child: Text('Экспорт истории',
-              style: TextStyle(color: Colors.white, fontSize: 12)),
-        ),
-        const PopupMenuItem<String>(
-          value: 'logs',
-          height: 40,
-          child: Text('Скачать логи',
-              style: TextStyle(color: Colors.white, fontSize: 12)),
-        ),
-        const PopupMenuItem<String>(
-          value: 'clear',
-          height: 40,
-          child: Text('Очистить историю',
-              style: TextStyle(color: Colors.white, fontSize: 12)),
-        ),
-      ],
     );
   }
 
@@ -480,42 +445,6 @@ class ChatScreen extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-
-  // Отображение диалога подтверждения очистки истории
-  void _showClearHistoryDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          backgroundColor: const Color(0xFF333333),
-          title: const Text(
-            'Очистить историю',
-            style: TextStyle(color: Colors.white, fontSize: 14),
-          ),
-          content: const Text(
-            'Вы уверены? Это действие нельзя отменить.',
-            style: TextStyle(color: Colors.white70, fontSize: 12),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Отмена', style: TextStyle(fontSize: 12)),
-            ),
-            TextButton(
-              onPressed: () {
-                context.read<ChatProvider>().clearHistory();
-                Navigator.of(context).pop();
-              },
-              child: const Text(
-                'Очистить',
-                style: TextStyle(color: Colors.red, fontSize: 12),
-              ),
-            ),
-          ],
-        );
-      },
     );
   }
 }

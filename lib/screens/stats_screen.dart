@@ -13,159 +13,160 @@ class StatsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<Map<String, dynamic>>(
-      future: DatabaseService().getStatistics(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(
-            child: CircularProgressIndicator(color: Colors.blue),
-          );
-        }
+    return Consumer<ChatProvider>(builder: (context, provider, child) {
+      return FutureBuilder<Map<String, dynamic>>(
+          future: DatabaseService().getStatistics(),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(
+                child: CircularProgressIndicator(color: Colors.blue),
+              );
+            }
 
-        if (snapshot.hasError) {
-          return Center(
-            child: Text(
-              'Ошибка загрузки статистики: ${snapshot.error}',
-              style: const TextStyle(color: Colors.red),
-            ),
-          );
-        }
+            if (snapshot.hasError) {
+              return Center(
+                child: Text(
+                  'Ошибка загрузки статистики: ${snapshot.error}',
+                  style: const TextStyle(color: Colors.red),
+                ),
+              );
+            }
 
-        final stats = snapshot.data ?? {};
-        final totalMessages = stats['total_messages'] ?? 0;
-        final totalTokens = stats['total_tokens'] ?? 0;
-        final modelUsage =
-            stats['model_usage'] as Map<String, Map<String, int>>? ?? {};
+            final stats = snapshot.data ?? {};
+            final totalMessages = stats['total_messages'] ?? 0;
+            final totalTokens = stats['total_tokens'] ?? 0;
+            final modelUsage =
+                stats['model_usage'] as Map<String, Map<String, int>>? ?? {};
 
-        return ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            // Card: Общая статистика
-            _buildStatCard(
-              title: 'Общая статистика',
-              icon: Icons.analytics,
-              color: Colors.blue,
+            return ListView(
+              padding: const EdgeInsets.all(16),
               children: [
-                _buildStatRow(
-                  icon: Icons.message,
-                  label: 'Всего сообщений',
-                  value: totalMessages.toString(),
-                ),
-                const SizedBox(height: 8),
-                _buildStatRow(
-                  icon: Icons.token,
-                  label: 'Всего токенов',
-                  value: totalTokens.toString(),
-                ),
-                const SizedBox(height: 8),
-                _buildStatRow(
-                  icon: Icons.calculate,
-                  label: 'Среднее токенов/сообщение',
-                  value: totalMessages > 0
-                      ? (totalTokens / totalMessages).toStringAsFixed(1)
-                      : '0',
-                ),
-              ],
-            ),
-
-            const SizedBox(height: 16),
-
-            // Card: Баланс
-            Consumer<ChatProvider>(
-              builder: (context, provider, child) {
-                return _buildStatCard(
-                  title: 'Баланс',
-                  icon: Icons.account_balance_wallet,
-                  color: Colors.green,
+                // Card: Общая статистика
+                _buildStatCard(
+                  title: 'Общая статистика',
+                  icon: Icons.analytics,
+                  color: Colors.blue,
                   children: [
                     _buildStatRow(
-                      icon: Icons.credit_card,
-                      label: 'Текущий баланс',
-                      value: provider.balance,
+                      icon: Icons.message,
+                      label: 'Всего сообщений',
+                      value: totalMessages.toString(),
+                    ),
+                    const SizedBox(height: 8),
+                    _buildStatRow(
+                      icon: Icons.token,
+                      label: 'Всего токенов',
+                      value: totalTokens.toString(),
+                    ),
+                    const SizedBox(height: 8),
+                    _buildStatRow(
+                      icon: Icons.calculate,
+                      label: 'Среднее токенов/сообщение',
+                      value: totalMessages > 0
+                          ? (totalTokens / totalMessages).toStringAsFixed(1)
+                          : '0',
                     ),
                   ],
-                );
-              },
-            ),
+                ),
 
-            const SizedBox(height: 16),
+                const SizedBox(height: 16),
 
-            // Card: Использование по моделям
-            if (modelUsage.isNotEmpty)
-              _buildStatCard(
-                title: 'Использование по моделям',
-                icon: Icons.model_training,
-                color: Colors.orange,
-                children: modelUsage.entries.map((entry) {
-                  final modelId = entry.key;
-                  final count = entry.value['count'] ?? 0;
-                  final tokens = entry.value['tokens'] ?? 0;
-                  final avgTokens =
-                      count > 0 ? (tokens / count).toStringAsFixed(1) : '0';
-
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                // Card: Баланс
+                Consumer<ChatProvider>(
+                  builder: (context, provider, child) {
+                    return _buildStatCard(
+                      title: 'Баланс',
+                      icon: Icons.account_balance_wallet,
+                      color: Colors.green,
                       children: [
-                        Text(
-                          modelId,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 13,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Row(
-                          children: [
-                            const Icon(Icons.message,
-                                size: 12, color: Colors.white54),
-                            const SizedBox(width: 4),
-                            Text(
-                              'Сообщений: $count',
-                              style: const TextStyle(
-                                color: Colors.white70,
-                                fontSize: 12,
-                              ),
-                            ),
-                            const SizedBox(width: 16),
-                            const Icon(Icons.token,
-                                size: 12, color: Colors.white54),
-                            const SizedBox(width: 4),
-                            Text(
-                              'Токенов: $tokens',
-                              style: const TextStyle(
-                                color: Colors.white70,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 2),
-                        Row(
-                          children: [
-                            const Icon(Icons.calculate,
-                                size: 12, color: Colors.white54),
-                            const SizedBox(width: 4),
-                            Text(
-                              'Среднее: $avgTokens токенов/сообщение',
-                              style: const TextStyle(
-                                color: Colors.white70,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ],
+                        _buildStatRow(
+                          icon: Icons.credit_card,
+                          label: 'Текущий баланс',
+                          value: provider.balance,
                         ),
                       ],
-                    ),
-                  );
-                }).toList(),
-              ),
-          ],
-        );
-      },
-    );
+                    );
+                  },
+                ),
+
+                const SizedBox(height: 16),
+
+                // Card: Использование по моделям
+                if (modelUsage.isNotEmpty)
+                  _buildStatCard(
+                    title: 'Использование по моделям',
+                    icon: Icons.model_training,
+                    color: Colors.orange,
+                    children: modelUsage.entries.map((entry) {
+                      final modelId = entry.key;
+                      final count = entry.value['count'] ?? 0;
+                      final tokens = entry.value['tokens'] ?? 0;
+                      final avgTokens =
+                          count > 0 ? (tokens / count).toStringAsFixed(1) : '0';
+
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              modelId,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Row(
+                              children: [
+                                const Icon(Icons.message,
+                                    size: 12, color: Colors.white54),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'Сообщений: $count',
+                                  style: const TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                                const SizedBox(width: 16),
+                                const Icon(Icons.token,
+                                    size: 12, color: Colors.white54),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'Токенов: $tokens',
+                                  style: const TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 2),
+                            Row(
+                              children: [
+                                const Icon(Icons.calculate,
+                                    size: 12, color: Colors.white54),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'Среднее: $avgTokens токенов/сообщение',
+                                  style: const TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      );
+                    }).toList(),
+                  ),
+              ],
+            );
+          });
+    });
   }
 
   // Построение карточки статистики

@@ -16,6 +16,7 @@ import '../api/openrouter_client.dart';
 import '../services/database_service.dart';
 // Импорт сервиса для аналитики
 import '../services/analytics_service.dart';
+import '../models/ai_model.dart';
 
 // Основной класс провайдера для управления состоянием чата
 class ChatProvider with ChangeNotifier {
@@ -26,7 +27,7 @@ class ChatProvider with ChangeNotifier {
   // Логи для отладки
   final List<String> _debugLogs = [];
   // Список доступных моделей
-  List<Map<String, dynamic>> _availableModels = [];
+  List<AIModel> _availableModels = [];
   // Текущая выбранная модель
   String? _currentModel;
   // Баланс пользователя
@@ -45,7 +46,7 @@ class ChatProvider with ChangeNotifier {
   // Геттер для получения неизменяемого списка сообщений
   List<ChatMessage> get messages => List.unmodifiable(_messages);
   // Геттер для получения списка доступных моделей
-  List<Map<String, dynamic>> get availableModels => _availableModels;
+  List<AIModel> get availableModels => _availableModels;
   // Геттер для получения текущей модели
   String? get currentModel => _currentModel;
   // Геттер для получения баланса
@@ -65,19 +66,20 @@ class ChatProvider with ChangeNotifier {
   // Метод инициализации провайдера
   Future<void> _initializeProvider() async {
     try {
-      // Логирование начала инициализации
       _log('Initializing provider...');
-      // Загрузка доступных моделей
+
+      await _api.initialize();
+      _log('API client initialized. Base URL: ${_api.baseUrl}');
+
       await _loadModels();
       _log('Models loaded: $_availableModels');
-      // Загрузка баланса
+
       await _loadBalance();
       _log('Balance loaded: $_balance');
-      // Загрузка истории сообщений
+
       await _loadHistory();
       _log('History loaded: ${_messages.length} messages');
     } catch (e, stackTrace) {
-      // Логирование ошибок инициализации
       _log('Error initializing provider: $e');
       _log('Stack trace: $stackTrace');
     }
@@ -89,11 +91,23 @@ class ChatProvider with ChangeNotifier {
       // Получение списка моделей из API
       _availableModels = await _api.getModels();
       // Сортировка моделей по имени по возрастанию
-      _availableModels
-          .sort((a, b) => (a['name'] as String).compareTo(b['name'] as String));
+      _availableModels.sort((a, b) => a.name.compareTo(b.name));
+
+      // Проверка, существует ли текущая модель в новом списке
+      if (_currentModel != null) {
+        final modelExists =
+            _availableModels.any((model) => model.id == _currentModel);
+        if (!modelExists) {
+          _log(
+              'Current model $_currentModel not found in new models list, resetting');
+          _currentModel = null;
+        }
+      }
+
       // Установка модели по умолчанию, если она не выбрана
       if (_availableModels.isNotEmpty && _currentModel == null) {
-        _currentModel = _availableModels[0]['id'];
+        _currentModel = _availableModels[0].id;
+        _log('Set default model to: $_currentModel');
       }
       // Уведомление слушателей об изменениях
       notifyListeners();
@@ -228,16 +242,14 @@ class ChatProvider with ChangeNotifier {
         final totalCost = response['usage']?['total_cost'];
 
         // Получение тарифов для текущей модели
-        final model = _availableModels
-            .firstWhere((model) => model['id'] == _currentModel);
+        final model = _availableModels.firstWhere(
+          (m) => m.id == _currentModel,
+          orElse: () => _availableModels.first,
+        );
 
         // Расчет стоимости запроса
-        final cost = (totalCost == null)
-            ? ((promptTokens *
-                    (double.tryParse(model['pricing']?['prompt']) ?? 0)) +
-                (completionTokens *
-                    (double.tryParse(model['pricing']?['completion']) ?? 0)))
-            : totalCost;
+        final cost =
+            (totalCost == null) ? model.promptPrice : model.completionPrice;
 
         // Логирование ответа API
         _log('Cost Response: $cost');

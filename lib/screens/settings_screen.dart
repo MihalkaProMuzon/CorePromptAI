@@ -48,7 +48,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   // Сохранение настроек
   Future<void> _saveSettings() async {
+    if (_apiKey.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Пожалуйста, введите API ключ'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
     try {
+      // Показать индикатор загрузки
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(
+          child: CircularProgressIndicator(color: Colors.blue),
+        ),
+      );
+
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('api_provider', _currentProvider);
       await prefs.setString('api_key', _apiKey);
@@ -62,16 +81,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (mounted) {
         await context.read<ChatProvider>().reinitializeClient(_apiKey, baseUrl);
 
+        // Закрыть индикатор загрузки
+        if (mounted) {
+          Navigator.pop(context);
+        }
+
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('Настройки сохранены и применены'),
+              content: Text(
+                  'Настройки сохранены и применены.\nМодели и баланс обновлены.'),
               backgroundColor: Colors.green,
+              duration: Duration(seconds: 2),
             ),
           );
         }
       }
     } catch (e) {
+      // Закрыть индикатор загрузки
+      if (mounted) {
+        Navigator.pop(context);
+      }
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
