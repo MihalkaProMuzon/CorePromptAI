@@ -108,17 +108,6 @@ lib/
 
 ---
 
-## 🚀 Быстрый старт
-
-```bash
-git clone https://github.com/your-repo/CorePromptAI.git
-cd CorePromptAI
-flutter pub get
-flutter run
-````
-
----
-
 ## ⚙️ Настройка
 
 Все настройки выполняются **внутри приложения**:
