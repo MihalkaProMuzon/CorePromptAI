@@ -165,5 +165,3 @@ build/app/outputs/flutter-apk/app-release.apk
 ## 📄 Лицензия
 
 Apache License 2.0
-
-````
